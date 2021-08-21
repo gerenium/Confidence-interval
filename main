@@ -13,7 +13,7 @@ from pylab import *
 
 
 print('==============================     №1     ================================')
-df = pd.read_csv('H:\\Downloads\\33d8648c-b016-49ed-8888-62dc0f35112c.csv')
+df = pd.read_csv('33d8648c-b016-49ed-8888-62dc0f35112c.csv')
 columns = df.columns.values
 #['id' 'required_amt' 'installment_flg' 'monthly_income_amt' 'age'
 # 'has_high_education_flg' 'approved_flg']
