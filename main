@@ -1,0 +1,194 @@
+import numpy as np
+import pandas as pd
+import scipy
+import matplotlib as plt
+from matplotlib import pylab, mlab, pyplot
+
+from statsmodels.stats.weightstats import _zconfint_generic, _tconfint_generic
+from statsmodels.stats.proportion import proportion_confint
+
+from IPython.core.pylabtools import figsize, getfigs
+
+from pylab import *
+
+
+print('==============================     №1     ================================')
+df = pd.read_csv('H:\\Downloads\\33d8648c-b016-49ed-8888-62dc0f35112c.csv')
+columns = df.columns.values
+#['id' 'required_amt' 'installment_flg' 'monthly_income_amt' 'age'
+# 'has_high_education_flg' 'approved_flg']
+
+df.dropna(subset = ['required_amt'], inplace = True)
+
+
+m_i_a = np.log(df.monthly_income_amt)
+r_a = np.log(df.required_amt)
+monthly_income_conf_int = _tconfint_generic(m_i_a.mean(),
+                                            m_i_a.std(ddof=1),
+                                            len(m_i_a) - 1,
+                                            0.05,
+                                            'two-sided')
+required_conf_int = _tconfint_generic(r_a.mean(),
+                                            r_a.std(ddof=1),
+                                            len(r_a) - 1,
+                                            0.05,
+                                            'two-sided')
+monthly_income_conf_int = [np.exp(monthly_income_conf_int[0]), np.exp(monthly_income_conf_int[1])]
+required_conf_int = [np.exp(required_conf_int[0]), np.exp(required_conf_int[1])]
+
+print('\n')
+print(f'95% предсказательный интервал месячного дохода: [{monthly_income_conf_int[0]:,.2f} - {monthly_income_conf_int[1]:,.2f}]')
+print(f'95% предсказательный интервал требуемой суммы: [{required_conf_int[0]:,.2f} - {required_conf_int[1]:,.2f}]')
+
+
+min_diff = np.percentile(m_i_a - r_a, 0.5)
+max_diff = np.percentile(m_i_a - r_a, 99.5)
+sample = m_i_a.to_numpy()  - r_a.to_numpy() 
+sample = sample[(min_diff < sample) & (sample < max_diff)]
+
+
+diff_conf_int = _tconfint_generic(sample.mean(),
+                                  sample.std(ddof=1),
+                                  len(df) - 1,
+                                  0.01,
+                                  'two-sided')
+diff_conf_int = [np.exp(diff_conf_int[0]), np.exp(diff_conf_int[1])]
+print(f'99% предсказательный интервал разности ежемесячного дохода и запрошенной суммы: [{diff_conf_int[0]:,.2f} - {diff_conf_int[1]:,.2f}]')
+print('\n')
+
+#========================================================================================
+print('==============================     №2     ================================')
+# образование
+not_approved__ed = df.loc[df.loc[:, 'approved_flg'] == 0]['has_high_education_flg']
+approved__ed = df.loc[df.loc[:, 'approved_flg'] == 1]['has_high_education_flg']
+
+interval_approved_client_has_ed = proportion_confint(df[df.has_high_education_flg == 1].approved_flg.sum(),
+                                                    len(df[df.has_high_education_flg == 1].approved_flg),
+                                                    alpha = 0.01,
+                                                    method = 'wilson')
+
+print(f' 99% Предсказательный интервал одобрения для клиентов с высшим образованием: [{interval_approved_client_has_ed[0]:.3f} - {interval_approved_client_has_ed[1]:.3f}]')
+
+interval_approved_client_hasnot_ed = proportion_confint(df[df.has_high_education_flg == 0].approved_flg.sum(),
+                                                    len(df[df.has_high_education_flg == 0].approved_flg),
+                                                    alpha = 0.01,
+                                                    method = 'wilson')
+
+print(f' 99% Предсказательный интервал одобрения для клиентов без высшего образования: [{interval_approved_client_hasnot_ed[0]:.3f} - {interval_approved_client_hasnot_ed[1]:.3f}]')
+
+def proportions_confint_diff_ind(sample1, sample2, alpha = 0.01):
+    '''Считает доверительный интервал для разности долей в независимых выборках'''
+    z = scipy.stats.norm.ppf(1 - alpha / 2.)
+    p1 = float(sum(sample1)) / len(sample1)
+    p2 = float(sum(sample2)) / len(sample2)
+    sigma = np.sqrt(p1 * (1 - p1)/ len(sample1) + p2 * (1 - p2)/ len(sample2))
+    left_boundary = (p1 - p2) - z * sigma
+    right_boundary = (p1 - p2) + z * sigma
+    return (left_boundary, right_boundary)
+
+int_substractiom = proportions_confint_diff_ind(df[df.has_high_education_flg == 1].approved_flg,
+                             df[df.has_high_education_flg == 0].approved_flg)
+print(f"Разница долей: [{int_substractiom[0]:.3f} - {int_substractiom[1]:.3f}]")
+print('\n')
+#-------------------------------------------------------------------------------------------------------------------
+# возраст
+a = []
+b = []
+x =[]
+min_age = df.age.min()
+max_age = df.age.max()
+N = 10 #количество разбиений
+n = trunc((max_age - min_age)/N)
+
+for i in range(N):
+    int_aproved_age = proportion_confint(df[df.approved_flg == 1].age.apply(lambda x: 1 if ((min_age + i*n<= x) and (x < min_age + (i+1)*n)) else 0).sum(),
+                                               len(df.age),
+                                               alpha = 0.01,
+                                               method = 'normal')
+    print( 'Доверительный интервал для одобрения для возраста', min_age + i*n, '-', min_age + (i+1)*n -1, ':', f'[{int_aproved_age[0]:.3f} - {int_aproved_age[1]:.3f}]')
+    a.append(int_aproved_age[0])
+    b.append(int_aproved_age[1])
+    x.append(min_age + i*n)
+plt.plot(x, a, label = 'нижняя граница интервала')
+plt.plot(x, b, label = 'верхняя граница интервала')
+plt.title('Вероятность одобрения в зависимости от возраста')
+plt.legend()
+plt.show()
+print('\n')
+
+#-------------------------------------------------------------------------------------------------------------------
+# доход
+N = 6 # количество разбиений
+n = round(len(df.monthly_income_amt)/N)
+a = []
+b = []
+x =[]
+df1 = df.copy()
+for i in range(N):
+    df1 = df1.sort_values('monthly_income_amt')
+    int_aproved_income_amt = proportion_confint(df1[n*i:n*(i+1)].approved_flg.sum(),
+                                               len(df.monthly_income_amt),
+                                               alpha = 0.01,
+                                               method = 'normal')
+    a.append(int_aproved_income_amt[0])
+    b.append(int_aproved_income_amt[1])
+    x.append(df1[n*i:n*(i+1)].monthly_income_amt.min())
+    print( 'Доверительный интервал для одобрения для зарплаты', df1.monthly_income_amt[n*i:n*(i+1)].min(), '-', df1.monthly_income_amt[n*i:n*(i+1)].max(), ':', f'[{int_aproved_income_amt[0]:.3f} - {int_aproved_income_amt[1]:.3f}]')
+plt.plot(x, a, label = 'нижняя граница интервала')
+plt.plot(x, b, label = 'верхняя граница интервала')
+plt.legend()
+plt.title('Вероятность одобрения в зависимости от дохода')
+plt.show()
+print('\n')
+
+#-------------------------------------------------------------------------------------------------------------------
+# требуемая сумма
+N = 5 # количество разбиений
+n = round(len(df.required_amt)/N)
+a = []
+b = []
+x =[]
+df1 = df.copy()
+for i in range(N):
+    df1 = df1.sort_values('required_amt')
+    int_aproved_required_amt = proportion_confint(df1[n*i:n*(i+1)].approved_flg.sum(),
+                                               len(df.monthly_income_amt),
+                                               alpha = 0.01,
+                                               method = 'normal')
+    a.append(int_aproved_required_amt[0])
+    b.append(int_aproved_required_amt[1])
+    x.append(df1[n*i:n*(i+1)].required_amt.min())
+    print( 'Доверительный интервал для одобрения для запрашиваеммой суммы', df1.required_amt[n*i:n*(i+1)].min(), '-', df1.required_amt[n*i:n*(i+1)].max(), ':', f'[{int_aproved_income_amt[0]:.3f} - {int_aproved_income_amt[1]:.3f}]')
+plt.plot(x, a, label = 'нижняя граница интервала')
+plt.plot(x, b, label = 'верхняя граница интервала')
+plt.legend()
+plt.title('Вероятность одобрения в зависимости от запрашиваемой суммы')
+plt.show()
+print('\n')
+#-------------------------------------------------------------------------------------------------------------------
+# рассрочка/кредит
+good_client_education_conf_int = proportion_confint(df[df.installment_flg == 1].approved_flg.sum(),
+                                                    len(df[df.installment_flg == 1].approved_flg),
+                                                    alpha = 0.01,
+                                                    method = 'wilson')
+
+print(f'99% предсказательныя интервал для получения рассчрочки: [{good_client_education_conf_int[0]:.3f} - {good_client_education_conf_int[1]:.3f}]')
+bad_client_education_conf_int = proportion_confint(df[df.installment_flg == 0].approved_flg.sum(),
+                                                    len(df[df.installment_flg == 0].approved_flg),
+                                                    alpha = 0.01,
+                                                    method = 'wilson')
+
+print(f'99% предсказательныя интервал для получения кредита: [{bad_client_education_conf_int[0]:.3f} - {bad_client_education_conf_int[1]:.3f}]')
+def proportions_confint_diff_ind(sample1, sample2, alpha = 0.01):
+    '''Считает доверительный интервал для разности долей в независимых выборках'''
+    z = scipy.stats.norm.ppf(1 - alpha / 2.)
+    p1 = float(sum(sample1)) / len(sample1)
+    p2 = float(sum(sample2)) / len(sample2)
+    sigma = np.sqrt(p1 * (1 - p1)/ len(sample1) + p2 * (1 - p2)/ len(sample2))
+    left_boundary = (p1 - p2) - z * sigma
+    right_boundary = (p1 - p2) + z * sigma
+    return (left_boundary, right_boundary)
+interval_installment_flg = proportions_confint_diff_ind(df[df.installment_flg == 1].has_high_education_flg,
+                             df[df.installment_flg == 0].has_high_education_flg)
+print(f"Разница долей: [{interval_installment_flg[0]:.3f} - {interval_installment_flg[1]:.3f}]")
+print('\n')
